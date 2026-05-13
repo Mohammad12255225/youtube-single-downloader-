@@ -33,6 +33,9 @@ jobs:
   download-youtube:
     runs-on: ubuntu-latest
     timeout-minutes: 180
+    # این مجوز را اضافه کنید تا Release بتواند ساخته شود
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -243,30 +246,36 @@ jobs:
           echo "All downloads completed. Files in all_videos:"
           ls -lh all_videos/
 
-        # Note: Subtitles step will run separately if enabled
-
       - name: Download Subtitles (optional)
         if: ${{ github.event.inputs.download_subtitles == 'true' }}
         run: |
-          # (Simplified subtitle downloader – still 8‑method retry logic)
-          # This step is unchanged from original avasam, but reduced to essential
-          # It creates subtitle files inside all_videos/ for each video.
+          # Subtitle download placeholder – you can add the full subtitle code if needed.
           echo "Subtitle download placeholder – function omitted for brevity."
-          echo "You can paste the original subtitle section if required."
-          # (If you want the full subtitle code, tell me and I'll append it.)
 
       - name: Create final ZIP archive
         run: |
-          if [ "$(ls -A all_videos 2>/dev/null)" ]; then
+          if [ "$(ls -A all_videos/*.mp4 all_videos/*.mp3 all_videos/*.webm 2>/dev/null)" ]; then
             zip -0 -r videos.zip all_videos/
             echo "ZIP created: $(ls -lh videos.zip)"
           else
-            echo "No video files found. Creating empty zip?"
+            echo "No video files found. Creating empty zip as fallback."
             zip -0 -r videos.zip all_videos/ || echo "No files to zip."
           fi
 
-      # ── NEW: Create a public Release with the ZIP file ─────────────────
+      - name: Check downloaded videos
+        id: check_videos
+        run: |
+          if ls all_videos/*.mp4 all_videos/*.mp3 all_videos/*.webm 1> /dev/null 2>&1; then
+            echo "has_videos=true" >> $GITHUB_OUTPUT
+            echo "✅ Video files exist."
+          else
+            echo "has_videos=false" >> $GITHUB_OUTPUT
+            echo "⚠️ No video files were downloaded."
+          fi
+
+      # ── Release only if at least one video file exists ──────────────
       - name: Create GitHub Release (Public direct download link)
+        if: steps.check_videos.outputs.has_videos == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -278,19 +287,19 @@ jobs:
           echo "RELEASE_URL=$RELEASE_URL" >> $GITHUB_ENV
           echo "Download link (public, no auth): $RELEASE_URL"
 
-      # Save the direct link into a text file and upload it as artifact
       - name: Save download link to file
+        if: steps.check_videos.outputs.has_videos == 'true'
         run: echo "${RELEASE_URL}" > release_url.txt
 
       - name: Upload release URL artifact
+        if: steps.check_videos.outputs.has_videos == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: download-link
           path: release_url.txt
           if-no-files-found: error
 
-      # Original artifact upload (keep it as backup if you want)
-      - name: Upload single artifact
+      - name: Upload single artifact (original, always uploads)
         uses: actions/upload-artifact@v4
         with:
           name: YouTube-Videos
