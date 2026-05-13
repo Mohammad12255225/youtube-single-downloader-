@@ -265,6 +265,31 @@ jobs:
             zip -0 -r videos.zip all_videos/ || echo "No files to zip."
           fi
 
+      # ── NEW: Create a public Release with the ZIP file ─────────────────
+      - name: Create GitHub Release (Public direct download link)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="yt-download-${{ github.run_id }}"
+          gh release create "$TAG" videos.zip \
+            --title "YouTube Download ${{ github.run_id }}" \
+            --notes "Videos downloaded by workflow run [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})."
+          RELEASE_URL="https://github.com/${{ github.repository }}/releases/download/$TAG/videos.zip"
+          echo "RELEASE_URL=$RELEASE_URL" >> $GITHUB_ENV
+          echo "Download link (public, no auth): $RELEASE_URL"
+
+      # Save the direct link into a text file and upload it as artifact
+      - name: Save download link to file
+        run: echo "${RELEASE_URL}" > release_url.txt
+
+      - name: Upload release URL artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: download-link
+          path: release_url.txt
+          if-no-files-found: error
+
+      # Original artifact upload (keep it as backup if you want)
       - name: Upload single artifact
         uses: actions/upload-artifact@v4
         with:
